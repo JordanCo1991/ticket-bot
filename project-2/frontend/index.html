@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IT Ticket Bot — Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 2rem; }
+        h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+        .subtitle { color: #94a3b8; margin-bottom: 2rem; }
+        .status-bar { display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; }
+        .status-card { background: #1e293b; padding: 1rem 1.5rem; border-radius: 8px; flex: 1; min-width: 180px; }
+        .status-card .label { color: #94a3b8; font-size: 0.85rem; }
+        .status-card .value { font-size: 1.4rem; font-weight: bold; margin-top: 0.3rem; }
+        .healthy { color: #4ade80; }
+        .degraded { color: #fbbf24; }
+        .unhealthy { color: #f87171; }
+        table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 8px; overflow: hidden; }
+        th { background: #334155; text-align: left; padding: 0.8rem 1rem; font-size: 0.85rem; color: #94a3b8; text-transform: uppercase; }
+        td { padding: 0.8rem 1rem; border-top: 1px solid #334155; }
+        .priority-critical { color: #f87171; font-weight: bold; }
+        .priority-high { color: #fbbf24; }
+        .priority-medium { color: #60a5fa; }
+        .priority-low { color: #94a3b8; }
+        .status-open { background: #1e3a5f; color: #60a5fa; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; }
+        .status-in_progress { background: #3b2f1a; color: #fbbf24; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; }
+        .new-ticket { margin-bottom: 2rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .new-ticket input, .new-ticket select { background: #1e293b; border: 1px solid #334155; color: #e2e8f0; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.95rem; }
+        .new-ticket input { flex: 1; min-width: 200px; }
+        .new-ticket button { background: #3b82f6; color: white; border: none; padding: 0.6rem 1.5rem; border-radius: 6px; cursor: pointer; font-size: 0.95rem; }
+        .new-ticket button:hover { background: #2563eb; }
+        .section-title { font-size: 1.2rem; margin-bottom: 1rem; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <h1>🤖 IT Ticket Automation Bot</h1>
+    <p class="subtitle">Project 2 — Docker Compose | by Jordan Cohen</p>
+
+    <div class="status-bar">
+        <div class="status-card">
+            <div class="label">System Status</div>
+            <div class="value" id="sys-status">Loading...</div>
+        </div>
+        <div class="status-card">
+            <div class="label">Database</div>
+            <div class="value" id="db-status">Loading...</div>
+        </div>
+        <div class="status-card">
+            <div class="label">Cache</div>
+            <div class="value" id="cache-status">Loading...</div>
+        </div>
+        <div class="status-card">
+            <div class="label">Total Tickets</div>
+            <div class="value" id="ticket-count">-</div>
+        </div>
+    </div>
+
+    <h2 class="section-title">Create New Ticket</h2>
+    <div class="new-ticket">
+        <input type="text" id="ticket-title" placeholder="Ticket title..." />
+        <select id="ticket-priority">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+        </select>
+        <button onclick="createTicket()">+ Add Ticket</button>
+    </div>
+
+    <h2 class="section-title">Tickets</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Created</th>
+            </tr>
+        </thead>
+        <tbody id="ticket-list">
+            <tr><td colspan="5">Loading tickets...</td></tr>
+        </tbody>
+    </table>
+
+    <script>
+        const API = '/api';
+
+        async function loadHealth() {
+            try {
+                const res = await fetch(`${API}/health`);
+                const data = await res.json();
+                document.getElementById('sys-status').textContent = data.status;
+                document.getElementById('sys-status').className = 'value ' + data.status;
+                document.getElementById('db-status').textContent = data.database;
+                document.getElementById('db-status').className = 'value ' + data.database;
+                document.getElementById('cache-status').textContent = data.cache;
+                document.getElementById('cache-status').className = 'value ' + data.cache;
+            } catch {
+                document.getElementById('sys-status').textContent = 'unreachable';
+                document.getElementById('sys-status').className = 'value unhealthy';
+            }
+        }
+
+        async function loadTickets() {
+            try {
+                const res = await fetch(`${API}/tickets`);
+                const data = await res.json();
+                const tickets = data.tickets;
+                document.getElementById('ticket-count').textContent = tickets.length;
+
+                const tbody = document.getElementById('ticket-list');
+                tbody.innerHTML = tickets.map(t => `
+                    <tr>
+                        <td>#${t.id}</td>
+                        <td>${t.title}</td>
+                        <td class="priority-${t.priority}">${t.priority}</td>
+                        <td><span class="status-${t.status}">${t.status}</span></td>
+                        <td>${new Date(t.created_at).toLocaleString()}</td>
+                    </tr>
+                `).join('');
+            } catch {
+                document.getElementById('ticket-list').innerHTML = '<tr><td colspan="5">Failed to load tickets</td></tr>';
+            }
+        }
+
+        async function createTicket() {
+            const title = document.getElementById('ticket-title').value.trim();
+            const priority = document.getElementById('ticket-priority').value;
+            if (!title) return alert('Please enter a ticket title');
+
+            await fetch(`${API}/tickets`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, priority })
+            });
+
+            document.getElementById('ticket-title').value = '';
+            loadTickets();
+        }
+
+        // Load data on page load
+        loadHealth();
+        loadTickets();
+
+        // Auto-refresh every 10 seconds
+        setInterval(loadHealth, 10000);
+        setInterval(loadTickets, 10000);
+    </script>
+</body>
+</html>
