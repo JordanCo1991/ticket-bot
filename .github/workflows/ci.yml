@@ -1,0 +1,46 @@
+# CI Pipeline — Runs on every Pull Request to main
+# Tests and lints the backend code, then builds the Docker image
+
+name: CI Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r project-2/backend/requirements.txt
+
+      - name: Lint with flake8
+        run: flake8 project-2/backend/ --max-line-length=120
+
+      - name: Run unit tests
+        run: |
+          cd project-2/backend
+          pytest test_app.py -v
+
+  build:
+    name: Build Docker Image
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t ticket-bot:test ./project-2/backend
+
+      - name: Verify image was created
+        run: docker images ticket-bot:test
