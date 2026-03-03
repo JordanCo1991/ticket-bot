@@ -12,15 +12,22 @@ import datetime
 
 app = Flask(__name__)
 
-# Database connection
+
 def get_db():
+    """Database connection."""
     return psycopg2.connect(os.environ["DATABASE_URL"])
 
-# Redis connection
-cache = redis.Redis(host=os.environ.get("REDIS_HOST", "redis"), port=6379, decode_responses=True)
 
-# Initialize database tables
+# Redis connection
+cache = redis.Redis(
+    host=os.environ.get("REDIS_HOST", "redis"),
+    port=6379,
+    decode_responses=True
+)
+
+
 def init_db():
+    """Initialize database tables."""
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
@@ -32,7 +39,6 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    # Insert sample tickets if table is empty
     cur.execute("SELECT COUNT(*) FROM tickets")
     if cur.fetchone()[0] == 0:
         sample_tickets = [
@@ -43,7 +49,8 @@ def init_db():
             ("Email server latency issues", "high", "open"),
         ]
         cur.executemany(
-            "INSERT INTO tickets (title, priority, status) VALUES (%s, %s, %s)",
+            "INSERT INTO tickets (title, priority, status) "
+            "VALUES (%s, %s, %s)",
             sample_tickets
         )
     conn.commit()
@@ -53,6 +60,7 @@ def init_db():
 
 @app.route("/")
 def home():
+    """Home endpoint with app info."""
     return jsonify({
         "app": "IT Ticket Automation Bot",
         "version": "2.0.0",
@@ -63,6 +71,7 @@ def home():
 
 @app.route("/health")
 def health():
+    """Health check endpoint."""
     db_status = "healthy"
     try:
         conn = get_db()
@@ -76,8 +85,12 @@ def health():
     except Exception:
         redis_status = "unhealthy"
 
+    status = "healthy" if (
+        db_status == "healthy" and redis_status == "healthy"
+    ) else "degraded"
+
     return jsonify({
-        "status": "healthy" if db_status == "healthy" and redis_status == "healthy" else "degraded",
+        "status": status,
         "timestamp": datetime.datetime.now().isoformat(),
         "database": db_status,
         "cache": redis_status
@@ -86,32 +99,47 @@ def health():
 
 @app.route("/tickets", methods=["GET"])
 def get_tickets():
-    # Try cache first
+    """Get all tickets, with Redis caching."""
     cached = cache.get("tickets:all")
     if cached:
-        return jsonify({"source": "cache", "tickets": json.loads(cached)})
+        return jsonify({
+            "source": "cache",
+            "tickets": json.loads(cached)
+        })
 
-    # Query database
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, title, priority, status, created_at FROM tickets ORDER BY id")
+    cur.execute(
+        "SELECT id, title, priority, status, created_at "
+        "FROM tickets ORDER BY id"
+    )
     rows = cur.fetchall()
     cur.close()
     conn.close()
 
     tickets = [
-        {"id": r[0], "title": r[1], "priority": r[2], "status": r[3], "created_at": r[4].isoformat()}
+        {
+            "id": r[0],
+            "title": r[1],
+            "priority": r[2],
+            "status": r[3],
+            "created_at": r[4].isoformat()
+        }
         for r in rows
     ]
 
-    # Cache for 30 seconds
     cache.setex("tickets:all", 30, json.dumps(tickets))
 
-    return jsonify({"source": "database", "total": len(tickets), "tickets": tickets})
+    return jsonify({
+        "source": "database",
+        "total": len(tickets),
+        "tickets": tickets
+    })
 
 
 @app.route("/tickets", methods=["POST"])
 def create_ticket():
+    """Create a new ticket."""
     data = request.get_json()
     if not data or "title" not in data:
         return jsonify({"error": "title is required"}), 400
@@ -119,15 +147,19 @@ def create_ticket():
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO tickets (title, priority, status) VALUES (%s, %s, %s) RETURNING id",
-        (data["title"], data.get("priority", "medium"), data.get("status", "open"))
+        "INSERT INTO tickets (title, priority, status) "
+        "VALUES (%s, %s, %s) RETURNING id",
+        (
+            data["title"],
+            data.get("priority", "medium"),
+            data.get("status", "open")
+        )
     )
     ticket_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
     conn.close()
 
-    # Invalidate cache
     cache.delete("tickets:all")
 
     return jsonify({"message": "Ticket created", "id": ticket_id}), 201
@@ -135,9 +167,14 @@ def create_ticket():
 
 @app.route("/tickets/<int:ticket_id>", methods=["GET"])
 def get_ticket(ticket_id):
+    """Get a single ticket by ID."""
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, title, priority, status, created_at FROM tickets WHERE id = %s", (ticket_id,))
+    cur.execute(
+        "SELECT id, title, priority, status, created_at "
+        "FROM tickets WHERE id = %s",
+        (ticket_id,)
+    )
     row = cur.fetchone()
     cur.close()
     conn.close()
@@ -146,8 +183,11 @@ def get_ticket(ticket_id):
         return jsonify({"error": "Ticket not found"}), 404
 
     return jsonify({
-        "id": row[0], "title": row[1], "priority": row[2],
-        "status": row[3], "created_at": row[4].isoformat()
+        "id": row[0],
+        "title": row[1],
+        "priority": row[2],
+        "status": row[3],
+        "created_at": row[4].isoformat()
     })
 
 

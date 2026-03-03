@@ -35,8 +35,8 @@ def test_home_has_all_endpoints(client):
     response = client.get("/")
     data = json.loads(response.data)
 
-    expected_endpoints = ["/", "/health", "/tickets", "/tickets/<id>"]
-    assert data["endpoints"] == expected_endpoints
+    expected = ["/", "/health", "/tickets", "/tickets/<id>"]
+    assert data["endpoints"] == expected
 
 
 @patch("app.get_db")
@@ -79,7 +79,7 @@ def test_health_redis_down(mock_cache, mock_db, client):
     """Test health endpoint when Redis is down."""
     mock_conn = MagicMock()
     mock_db.return_value = mock_conn
-    mock_cache.ping.side_effect = Exception("Redis connection failed")
+    mock_cache.ping.side_effect = Exception("Redis down")
 
     response = client.get("/health")
     data = json.loads(response.data)
@@ -93,17 +93,16 @@ def test_health_redis_down(mock_cache, mock_db, client):
 @patch("app.get_db")
 @patch("app.cache")
 def test_get_tickets_from_db(mock_cache, mock_db, client):
-    """Test getting tickets from database when cache is empty."""
-    # Cache miss
+    """Test getting tickets from database when cache miss."""
     mock_cache.get.return_value = None
-
-    # Mock database response
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
     from datetime import datetime
     mock_cursor.fetchall.return_value = [
-        (1, "VPN not connecting", "high", "open", datetime(2026, 1, 1, 12, 0, 0)),
-        (2, "Password reset", "low", "open", datetime(2026, 1, 1, 12, 0, 0)),
+        (1, "VPN not connecting", "high", "open",
+         datetime(2026, 1, 1, 12, 0, 0)),
+        (2, "Password reset", "low", "open",
+         datetime(2026, 1, 1, 12, 0, 0)),
     ]
     mock_conn.cursor.return_value = mock_cursor
     mock_db.return_value = mock_conn
@@ -122,9 +121,13 @@ def test_get_tickets_from_db(mock_cache, mock_db, client):
 @patch("app.cache")
 def test_get_tickets_from_cache(mock_cache, mock_db, client):
     """Test getting tickets from Redis cache."""
-    cached_tickets = [
-        {"id": 1, "title": "Cached ticket", "priority": "low", "status": "open", "created_at": "2026-01-01T12:00:00"}
-    ]
+    cached_tickets = [{
+        "id": 1,
+        "title": "Cached ticket",
+        "priority": "low",
+        "status": "open",
+        "created_at": "2026-01-01T12:00:00"
+    }]
     mock_cache.get.return_value = json.dumps(cached_tickets)
 
     response = client.get("/tickets")
@@ -145,8 +148,13 @@ def test_create_ticket_success(mock_cache, mock_db, client):
     mock_conn.cursor.return_value = mock_cursor
     mock_db.return_value = mock_conn
 
-    response = client.post("/tickets",
-        data=json.dumps({"title": "New server needed", "priority": "high"}),
+    payload = json.dumps({
+        "title": "New server needed",
+        "priority": "high"
+    })
+    response = client.post(
+        "/tickets",
+        data=payload,
         content_type="application/json"
     )
     data = json.loads(response.data)
@@ -154,16 +162,17 @@ def test_create_ticket_success(mock_cache, mock_db, client):
     assert response.status_code == 201
     assert data["message"] == "Ticket created"
     assert data["id"] == 42
-    # Verify cache was invalidated
     mock_cache.delete.assert_called_once_with("tickets:all")
 
 
 @patch("app.get_db")
 @patch("app.cache")
 def test_create_ticket_no_title(mock_cache, mock_db, client):
-    """Test creating a ticket without a title returns 400."""
-    response = client.post("/tickets",
-        data=json.dumps({"priority": "high"}),
+    """Test creating a ticket without title returns 400."""
+    payload = json.dumps({"priority": "high"})
+    response = client.post(
+        "/tickets",
+        data=payload,
         content_type="application/json"
     )
     data = json.loads(response.data)
@@ -178,7 +187,10 @@ def test_get_single_ticket(mock_db, client):
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
     from datetime import datetime
-    mock_cursor.fetchone.return_value = (1, "VPN issue", "high", "open", datetime(2026, 1, 1, 12, 0, 0))
+    mock_cursor.fetchone.return_value = (
+        1, "VPN issue", "high", "open",
+        datetime(2026, 1, 1, 12, 0, 0)
+    )
     mock_conn.cursor.return_value = mock_cursor
     mock_db.return_value = mock_conn
 
