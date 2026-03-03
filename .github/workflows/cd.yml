@@ -1,0 +1,32 @@
+# CD Pipeline — Runs on every push/merge to main
+# Builds the Docker image and pushes it to Docker Hub
+
+name: CD Pipeline
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Build & Push to Docker Hub
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and tag image
+        run: |
+          docker build -t jorco/ticket-bot:latest ./project-2/backend
+          docker build -t jorco/ticket-bot:${{ github.sha }} ./project-2/backend
+
+      - name: Push to Docker Hub
+        run: |
+          docker push jorco/ticket-bot:latest
+          docker push jorco/ticket-bot:${{ github.sha }}
